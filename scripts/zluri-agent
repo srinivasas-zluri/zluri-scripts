@@ -1,0 +1,384 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ----------------------
+# Zluri Agent Management
+# ----------------------
+#
+# This script provides comprehensive management tools for the Zluri desktop agent
+# including installation, configuration, cleaning, and troubleshooting functions.
+
+# Configuration file path
+AGENT_CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/zluri/agent.conf"
+
+# Load configuration
+load_agent_config() {
+    if [[ -f "$AGENT_CONFIG_FILE" ]]; then
+        # shellcheck disable=SC1090
+        source "$AGENT_CONFIG_FILE"
+    fi
+}
+
+# Save configuration
+save_agent_config() {
+    local config_dir="$(dirname "$AGENT_CONFIG_FILE")"
+    mkdir -p "$config_dir"
+    
+    cat > "$AGENT_CONFIG_FILE" <<EOF
+# Zluri Agent Configuration
+# Generated on $(date)
+
+# Release directory for Zluri desktop agent
+RELEASE_DIR="${RELEASE_DIR:-}"
+
+# Last used organization token
+LAST_ORG_TOKEN="${LAST_ORG_TOKEN:-}"
+
+# Last used app name (zluri or electron)
+LAST_APP_NAME="${LAST_APP_NAME:-zluri}"
+EOF
+}
+
+# Check for help flags
+if [[ "${1:-}" == "help" || "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+    echo "Zluri Agent Management Tool"
+    echo ""
+    echo "DESCRIPTION:"
+    echo "  Comprehensive management tools for the Zluri desktop agent."
+    echo "  Handles installation, configuration, cleaning, and troubleshooting."
+    echo ""
+    echo "COMMANDS:"
+    echo "  reset            Clean and reinstall Zluri agent"
+    echo "  install          Clean and reinstall Zluri agent (alias for reset)"
+    echo "  create-config    Create Zluri config (interactive or by org name)"
+    echo "  clean            Clean app data (--dev for Electron, default: Zluri)"
+    echo "  uninstall        Kill Zluri, delete app, and clear all related data"
+    echo "  set-release-dir  Set the release directory path"
+    echo "  decode-jwt       Decode JWT token (useful for debugging)"
+    echo "  help             Show this help message"
+    echo ""
+    echo "EXAMPLES:"
+    echo "  zluri agent reset           # Clean and reinstall Zluri"
+    echo "  zluri agent create-config   # Create configuration interactively"
+    echo "  zluri agent set-release-dir # Set release directory path"
+    echo "  zluri agent clean           # Clean Zluri app data"
+    echo "  zluri agent clean --dev     # Clean Electron app data"
+    echo "  zluri agent uninstall      # Complete uninstall"
+    echo ""
+    echo "CONFIGURATION:"
+    echo "  • Agent config: $AGENT_CONFIG_FILE"
+    echo "  • App config: ~/Library/Application Support/zluri/"
+    echo "  • Supports multiple organization tokens"
+    echo "  • Interactive selection with fzf (if available)"
+    echo ""
+    echo "DEPENDENCIES:"
+    echo "  • fzf - for interactive selection (optional)"
+    echo "  • jq - for JWT decoding (optional)"
+    echo "  • rg (ripgrep) - for process management (optional)"
+    exit 0
+fi
+
+# Main command dispatcher
+zluri_agent() {
+  local cmd="${1:-help}"
+  shift || true
+
+  # Request sudo privileges upfront for commands that need it
+  if [[ "$cmd" == "reset" || "$cmd" == "install" || "$cmd" == "uninstall" ]]; then
+    sudo -v
+  fi
+
+  case "$cmd" in
+    reset|install) zluri_reset "$@" ;;
+    create-config) zluri_create_config "$@" ;;
+    clean) zluri_clean "$@" ;;
+    clean-electron) zluri_clean_electron ;;
+    clean-zluri) zluri_clean_zluri ;;
+    uninstall) zluri_uninstall ;;
+    set-release-dir) zluri_set_release_dir "$@" ;;
+    decode-jwt) decode_jwt "$@" ;;
+    help|"") zluri_agent_help ;;
+    *) echo "Unknown command: $cmd"; zluri_agent_help ;;
+  esac
+}
+
+zluri_agent_help() {
+  echo "Usage: zluri agent <command>"
+  echo ""
+  echo "Commands:"
+  echo "  reset            Clean and reinstall Zluri"
+  echo "  install          Clean and reinstall Zluri"
+  echo "  create-config    Create Zluri config (interactive or by org name)"
+  echo "  clean            Clean app data (--dev for Electron, default: Zluri)"
+  echo "  uninstall        Kill Zluri, delete app, and clear all related data"
+  echo "  set-release-dir  Set the release directory path"
+  echo "  decode-jwt       Decode JWT token"
+  echo "  help             Show this help message"
+}
+
+# ----------------------
+# Core Functions
+# ----------------------
+
+zluri_set_release_dir() {
+  load_agent_config
+  
+  local new_dir="${1:-}"
+  
+  if [[ -z "$new_dir" ]]; then
+    echo "📁 Current release directory: ${RELEASE_DIR:-'Not set'}"
+    echo ""
+    read -rp "Enter new release directory path: " new_dir
+  fi
+  
+  if [[ -z "$new_dir" ]]; then
+    echo "❌ No directory provided."
+    return 1
+  fi
+  
+  # Expand tilde and resolve path
+  new_dir="${new_dir/#\~/$HOME}"
+  new_dir="$(realpath "$new_dir" 2>/dev/null || echo "$new_dir")"
+  
+  if [[ ! -d "$new_dir" ]]; then
+    echo "❌ Directory does not exist: $new_dir"
+    read -rp "Create directory? (y/N): " create_dir
+    if [[ "$create_dir" =~ ^[Yy]$ ]]; then
+      mkdir -p "$new_dir"
+      echo "✅ Created directory: $new_dir"
+    else
+      echo "❌ Directory creation cancelled."
+      return 1
+    fi
+  fi
+  
+  RELEASE_DIR="$new_dir"
+  save_agent_config
+  
+  echo "✅ Release directory set to: $RELEASE_DIR"
+  echo "   Config saved to: $AGENT_CONFIG_FILE"
+}
+
+zluri_reset() {
+  load_agent_config
+  
+  # Check if release directory is configured
+  if [[ -z "${RELEASE_DIR:-}" ]]; then
+    echo "❌ Release directory not configured."
+    echo "   Please set it first with: zluri agent set-release-dir"
+    echo ""
+    read -rp "Set release directory now? (y/N): " set_now
+    if [[ "$set_now" =~ ^[Yy]$ ]]; then
+      zluri_set_release_dir
+    else
+      echo "❌ Release directory required for reset operation."
+      return 1
+    fi
+  fi
+  
+  local release_dir="$RELEASE_DIR"
+
+  echo "🔄 Resetting Zluri agent..."
+
+  zluri_clean_zluri
+
+  if [[ ! -d "$release_dir" ]]; then
+    echo "❌ Release directory not found at: $release_dir"
+    echo "   Please ensure the Zluri desktop agent source is available."
+    return 1
+  fi
+
+  cd "$release_dir" || { echo "❌ Cannot access release directory."; return 1; }
+
+  local selected_version
+  if command -v fzf >/dev/null 2>&1; then
+    selected_version=$(ls -d */ | sed 's#/##' | fzf --prompt="Select Zluri version: ") || return 1
+  else
+    echo "Available versions:"
+    ls -d */ | sed 's#/##' | nl
+    read -rp "Enter version number: " version_num
+    selected_version=$(ls -d */ | sed 's#/##' | sed -n "${version_num}p")
+  fi
+
+  if [[ -z "$selected_version" ]]; then
+    echo "❌ No version selected."
+    return 1
+  fi
+
+  zluri_uninstall
+
+  zluri_create_config
+
+  echo "🚀 Opening Zluri version: $selected_version"
+  if [[ -f "$release_dir$selected_version/mac/Zluri.app" ]]; then
+    open -a "$(realpath "$release_dir$selected_version/mac/Zluri.app")" --args --dev_tools=true
+  else
+    echo "❌ Zluri.app not found at: $release_dir$selected_version/mac/"
+    return 1
+  fi
+}
+
+zluri_uninstall() {
+  echo "🛑 Stopping Zluri processes..."
+  
+  if command -v rg >/dev/null 2>&1; then
+    if ps -eo pid,comm | rg zluri | awk '{print $1}' | sudo xargs -r kill -9 2>/dev/null; then
+      echo "✅ Zluri processes stopped successfully."
+    else
+      echo "ℹ️  No Zluri processes found or already stopped."
+    fi
+  else
+    # Fallback without ripgrep
+    if pgrep -f zluri >/dev/null 2>&1; then
+      sudo pkill -f zluri
+      echo "✅ Zluri processes stopped successfully."
+    else
+      echo "ℹ️  No Zluri processes found."
+    fi
+  fi
+
+  echo "🗑️  Uninstalling Zluri..."
+  if rm -rf "/Applications/Zluri.app"; then
+    echo "✅ Zluri uninstalled from /Applications."
+  else
+    echo "ℹ️  Zluri.app not found in /Applications (may already be uninstalled)."
+  fi
+
+  echo "🧹 Removing Zluri support data..."
+  zluri_clean_zluri
+
+  echo "✅ Zluri fully uninstalled and cleaned."
+}
+
+zluri_create_config() {
+  load_agent_config
+  
+  local app_name="${LAST_APP_NAME:-zluri}"
+
+  if [[ "$1" == "-d" ]]; then
+    app_name="electron"
+    echo "ℹ️  Creating config for Electron app"
+  fi
+
+  local app_support_dir="$HOME/Library/Application Support/$app_name/"
+  mkdir -p "$app_support_dir"
+
+  local orgs=$(cat <<EOF
+None|none
+DemoXZluri(dev)|605072ae40973f002d004cc5
+ZluriProd(Not For Testing)|66432e2e147e201477f1e2c2
+EOF
+)
+
+  local org_name
+  local token
+
+  if command -v fzf >/dev/null 2>&1; then
+    local selection=$(echo "$orgs" | fzf --prompt="Select Org: ")
+    [[ -z "$selection" ]] && echo "❌ No org selected." && return 1
+    token=$(echo "$selection" | cut -d'|' -f2)
+  fi
+
+  if [[ "$token" == "none" ]]; then
+    echo "ℹ️  Skipping config creation (None selected)."
+    return 0
+  fi
+
+  echo "📝 Creating client-config.json with token: $token"
+  cat > "${app_support_dir}client-config.json" <<EOF
+{
+  "org_token": "$token",
+  "interval": "3600000",
+  "local_server": "on",
+  "hide_zluri_tray_icon": true
+}
+EOF
+  echo "✅ Config created at ${app_support_dir}client-config.json"
+  
+  # Save the selected token and app name for future use
+  LAST_ORG_TOKEN="$token"
+  LAST_APP_NAME="$app_name"
+  save_agent_config
+}
+
+zluri_clean() {
+  local dev_mode=false
+  
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      --dev)
+        dev_mode=true
+        shift
+        ;;
+      --help|-h)
+        echo "Clean Command Usage:"
+        echo "  zluri agent clean        # Clean Zluri app data (default)"
+        echo "  zluri agent clean --dev  # Clean Electron app data"
+        echo ""
+        echo "This command removes application data and temporary files."
+        echo "Use --dev flag to clean Electron development data instead of Zluri production data."
+        return 0
+        ;;
+      *)
+        echo "Unknown option: $1"
+        echo "Use 'zluri agent clean --help' for usage information."
+        return 1
+        ;;
+    esac
+  done
+  
+  if [[ "$dev_mode" == "true" ]]; then
+    echo "🧹 Cleaning Electron development data..."
+    zluri_clean_electron
+  else
+    echo "🧹 Cleaning Zluri production data..."
+    zluri_clean_zluri
+  fi
+}
+
+zluri_clean_electron() {
+  local dir="$HOME/Library/Application Support/electron/"
+  echo "🧹 Cleaning Electron data at $dir"
+  if rm -rf "$dir"; then
+    echo "✅ Electron data cleaned."
+  else
+    echo "ℹ️  No Electron data found or already cleaned."
+  fi
+  zluri_clear_tmp
+}
+
+zluri_clean_zluri() {
+  local dir="$HOME/Library/Application Support/zluri/"
+  echo "🧹 Cleaning Zluri data at $dir"
+  if rm -rf "$dir"; then
+    echo "✅ Zluri data cleaned from $dir."
+  else
+    echo "ℹ️  No Zluri data found or already cleaned."
+  fi
+
+  zluri_clear_tmp
+}
+
+zluri_clear_tmp() {
+  if rm -rf /tmp/zluritemp; then
+    echo "✅ /tmp/zluritemp cleaned."
+  else
+    echo "ℹ️  /tmp/zluritemp not found or already cleaned."
+  fi
+}
+
+decode_jwt() {
+  local jwt="${1:-$(cat)}"
+  
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "❌ jq is required for JWT decoding. Install with: brew install jq"
+    return 1
+  fi
+  
+  echo "🔍 Decoding JWT token..."
+  jq -R 'split(".") | .[1] | @base64d | fromjson' <<< "$jwt"
+}
+
+# Run the main function
+zluri_agent "$@"

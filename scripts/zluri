@@ -9,22 +9,30 @@ case "$COMMAND" in
     shift
     "$(dirname "$0")/zluri-deploy" "$@"
     ;;
+  agent)
+    shift
+    "$(dirname "$0")/zluri-agent" "$@"
+    ;;
   help|--help|-h)
     echo "Usage: zluri <command>"
     echo ""
     echo "Available commands:"
     echo "  deploy     Trigger feature env deployment"
+    echo "  agent      Manage Zluri desktop agent (install, reset, clean, etc.)"
     echo "  help       Show this help message"
     echo ""
     echo "Examples:"
-    echo "  zluri deploy    # Start interactive deployment process"
-    echo "  zluri help      # Show this help message"
+    echo "  zluri deploy           # Start interactive deployment process"
+    echo "  zluri agent reset      # Clean and reinstall Zluri agent"
+    echo "  zluri agent help       # Show agent command help"
+    echo "  zluri help             # Show this help message"
     ;;
   *)
     echo "Usage: zluri <command>"
     echo ""
     echo "Available commands:"
     echo "  deploy     Trigger feature env deployment"
+    echo "  agent      Manage Zluri desktop agent (install, reset, clean, etc.)"
     echo "  help       Show this help message"
     echo ""
     echo "Use 'zluri help' for more information."

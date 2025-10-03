@@ -1,0 +1,47 @@
+# Zluri Deploy Configuration File
+# Copy this file to ~/.config/zluri/deploy.conf and customize as needed
+
+# Default repository selection (comma-separated)
+# Available: workflow-service, v1-dashboard, dashboard-api, zluri-n8n, 
+#           integrations-v1, bull-scheduler, Integration-queue-consumer,
+#           workflows-lambda, agenda-project, all
+DEFAULT_REPOS="workflow-service,v1-dashboard"
+
+# Default branch name (leave empty to prompt each time)
+DEFAULT_BRANCH=""
+
+# GitHub repository for deployments
+DEPLOY_REPO="ZluriHQ/centralized-deployment"
+
+# Workflow file name
+WORKFLOW_FILE="deploy-feature-env.yaml"
+
+# Default workflow reference branch
+WORKFLOW_REF="feature/create-env-config"
+
+# Logging configuration
+LOG_LEVEL="INFO"  # DEBUG, INFO, WARNING, ERROR
+LOG_TO_FILE=false
+LOG_FILE_PATH="~/.config/zluri/deploy.log"
+
+# UI preferences
+USE_COLORS=true
+CONFIRM_ACTIONS=true
+
+# Timeout settings (in seconds)
+DEPLOYMENT_TIMEOUT=300
+API_TIMEOUT=30
+
+# Available repositories list
+AVAILABLE_REPOS=(
+  "workflow-service"
+  "v1-dashboard"
+  "dashboard-api"
+  "zluri-n8n"
+  "integrations-v1"
+  "bull-scheduler"
+  "Integration-queue-consumer"
+  "workflows-lambda"
+  "agenda-project"
+  "all"
+)

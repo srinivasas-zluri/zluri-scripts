@@ -7,10 +7,12 @@ class Zluri < Formula
 
   depends_on "gh"
   depends_on "sk"
+  depends_on "jq"
 
   def install
     bin.install "zluri"
     bin.install "zluri-deploy"
+    bin.install "zluri-agent"
     
     # Install zsh completion
     zsh_completion.install "_zluri"

@@ -16,6 +16,7 @@ _zluri() {
         command)
             local commands=(
                 'deploy:Trigger feature env deployment'
+                'agent:Manage Zluri desktop agent (install, reset, clean, etc.)'
                 'help:Show help message'
                 '--help:Show help message'
                 '-h:Show help message'
@@ -26,11 +27,36 @@ _zluri() {
             case $line[1] in
                 deploy)
                     local deploy_args=(
+                        'config:Manage deployment configuration'
                         'help:Show deploy command help and workflow information'
                         '--help:Show deploy command help and workflow information'
                         '-h:Show deploy command help and workflow information'
                     )
                     _describe 'deploy options' deploy_args
+                    ;;
+                agent)
+                    if [[ $COMP_CWORD == 2 ]]; then
+                        local agent_args=(
+                            'reset:Clean and reinstall Zluri agent'
+                            'install:Clean and reinstall Zluri agent (alias for reset)'
+                            'create-config:Create Zluri config (interactive or by org name)'
+                            'clean:Clean app data (--dev for Electron, default: Zluri)'
+                            'uninstall:Kill Zluri, delete app, and clear all related data'
+                            'set-release-dir:Set the release directory path'
+                            'decode-jwt:Decode JWT token (useful for debugging)'
+                            'help:Show agent command help'
+                            '--help:Show agent command help'
+                            '-h:Show agent command help'
+                        )
+                        _describe 'agent options' agent_args
+                    elif [[ $COMP_CWORD == 3 && "${COMP_WORDS[2]}" == "clean" ]]; then
+                        local clean_args=(
+                            '--dev:Clean Electron development data instead of Zluri production data'
+                            '--help:Show clean command help'
+                            '-h:Show clean command help'
+                        )
+                        _describe 'clean options' clean_args
+                    fi
                     ;;
                 help|--help|-h)
                     _message "help command - shows usage information"

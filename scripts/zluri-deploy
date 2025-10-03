@@ -1,6 +1,56 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Configuration file path
+DEPLOY_CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/zluri/deploy.conf"
+
+# Load configuration
+load_deploy_config() {
+    if [[ -f "$DEPLOY_CONFIG_FILE" ]]; then
+        # shellcheck disable=SC1090
+        source "$DEPLOY_CONFIG_FILE"
+    fi
+}
+
+# Save configuration
+save_deploy_config() {
+    local config_dir="$(dirname "$DEPLOY_CONFIG_FILE")"
+    mkdir -p "$config_dir"
+    
+    cat > "$DEPLOY_CONFIG_FILE" <<EOF
+# Zluri Deploy Configuration
+# Generated on $(date)
+
+# Default repository selection
+DEFAULT_REPOS="${DEFAULT_REPOS:-workflow-service,v1-dashboard}"
+
+# Default branch name
+DEFAULT_BRANCH="${DEFAULT_BRANCH:-}"
+
+# GitHub repository for deployments
+DEPLOY_REPO="${DEPLOY_REPO:-ZluriHQ/centralized-deployment}"
+
+# Workflow file name
+WORKFLOW_FILE="${WORKFLOW_FILE:-deploy-feature-env.yaml}"
+
+# Default workflow reference branch
+WORKFLOW_REF="${WORKFLOW_REF:-feature/create-env-config}"
+
+# Logging configuration
+LOG_LEVEL="${LOG_LEVEL:-INFO}"
+LOG_TO_FILE="${LOG_TO_FILE:-false}"
+LOG_FILE_PATH="${LOG_FILE_PATH:-~/.config/zluri/deploy.log}"
+
+# UI preferences
+USE_COLORS="${USE_COLORS:-true}"
+CONFIRM_ACTIONS="${CONFIRM_ACTIONS:-true}"
+
+# Timeout settings
+DEPLOYMENT_TIMEOUT="${DEPLOYMENT_TIMEOUT:-300}"
+API_TIMEOUT="${API_TIMEOUT:-30}"
+EOF
+}
+
 # Check for help flags
 if [[ "${1:-}" == "help" || "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
     echo "Zluri Deploy - Feature Environment Deployment Tool"
@@ -32,7 +82,8 @@ if [[ "${1:-}" == "help" || "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
     echo "  • all (deploys all repositories)"
     echo ""
     echo "CONFIGURATION:"
-    echo "  • Last used branch and repos are saved in: ~/.config/deploy-feature-env.conf"
+    echo "  • Deploy config: $DEPLOY_CONFIG_FILE"
+    echo "  • Last used branch and repos are saved for convenience"
     echo "  • Previous selections are pre-selected for convenience"
     echo ""
     echo "DEPENDENCIES:"
@@ -44,7 +95,8 @@ if [[ "${1:-}" == "help" || "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
     echo ""
     echo "EXAMPLES:"
     echo "  zluri deploy           # Interactive deployment"
-    echo "  zluri deploy help     # Show this help"
+    echo "  zluri deploy config    # Manage deployment configuration"
+    echo "  zluri deploy help      # Show this help"
     echo ""
     echo "TIPS:"
     echo "  • Use TAB to multi-select repositories"
@@ -54,9 +106,20 @@ if [[ "${1:-}" == "help" || "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
     exit 0
 fi
 
-REPO="ZluriHQ/centralized-deployment"
-WORKFLOW_FILE="deploy-feature-env.yaml"
-CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/deploy-feature-env.conf"
+# Check for config command
+if [[ "${1:-}" == "config" ]]; then
+    shift
+    zluri_deploy_config "$@"
+    exit 0
+fi
+
+# Load configuration
+load_deploy_config
+
+# Set default values if not configured
+REPO="${DEPLOY_REPO:-ZluriHQ/centralized-deployment}"
+WORKFLOW_FILE="${WORKFLOW_FILE:-deploy-feature-env.yaml}"
+CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/zluri/deploy-last.conf"
 
 AVAILABLE_REPOS=(
   "workflow-service"
@@ -102,7 +165,8 @@ echo " Select repos to deploy (TAB to multi-select, ENTER to confirm)"
 echo "======================================================="
 
 CHOICE_LIST=$(printf "%s\n" "${AVAILABLE_REPOS[@]}")
-PRESELECT_ITEMS=$(echo "$LAST_REPOS" | tr ',' '\n')
+# Use configured default repos if no last repos are saved
+PRESELECT_ITEMS=$(echo "${LAST_REPOS:-${DEFAULT_REPOS:-}}" | tr ',' '\n')
 
 # --- Repo selection using sk ---
 CHOICES=$(echo "$CHOICE_LIST" | sk --multi --bind "tab:toggle+down" --pre-select-items "$PRESELECT_ITEMS")
@@ -119,8 +183,8 @@ else
 fi
 
 # --- Branch input ---
-read -rp "Enter feature branch name (branch_name) [${LAST_BRANCH:-}]: " BRANCH_NAME
-BRANCH_NAME="${BRANCH_NAME:-$LAST_BRANCH}"
+read -rp "Enter feature branch name (branch_name) [${LAST_BRANCH:-${DEFAULT_BRANCH:-}}]: " BRANCH_NAME
+BRANCH_NAME="${BRANCH_NAME:-${LAST_BRANCH:-${DEFAULT_BRANCH:-}}}"
 
 if [[ -z "$BRANCH_NAME" ]]; then
   echo "❌ branch_name is required"
@@ -145,6 +209,63 @@ echo ""
 
 gh workflow run "$WORKFLOW_FILE" \
   --repo "$REPO" \
-  --ref feature/create-env-config \
+  --ref "${WORKFLOW_REF:-feature/create-env-config}" \
   --field branch_name="$BRANCH_NAME" \
   --field repo_names="$SELECTED_REPOS"
+
+# ----------------------
+# Configuration Management
+# ----------------------
+
+zluri_deploy_config() {
+    local cmd="${1:-show}"
+    
+    case "$cmd" in
+        show|"")
+            echo "📋 Current Deploy Configuration"
+            echo "================================"
+            echo "Config file: $DEPLOY_CONFIG_FILE"
+            echo ""
+            if [[ -f "$DEPLOY_CONFIG_FILE" ]]; then
+                cat "$DEPLOY_CONFIG_FILE"
+            else
+                echo "No configuration file found."
+                echo "Run 'zluri deploy config init' to create one."
+            fi
+            ;;
+        init)
+            echo "🔧 Initializing deploy configuration..."
+            save_deploy_config
+            echo "✅ Configuration created at: $DEPLOY_CONFIG_FILE"
+            echo "   Edit this file to customize your deployment settings."
+            ;;
+        edit)
+            if [[ -f "$DEPLOY_CONFIG_FILE" ]]; then
+                ${EDITOR:-nano} "$DEPLOY_CONFIG_FILE"
+            else
+                echo "❌ No configuration file found."
+                echo "Run 'zluri deploy config init' to create one."
+            fi
+            ;;
+        reset)
+            echo "🔄 Resetting to default configuration..."
+            rm -f "$DEPLOY_CONFIG_FILE"
+            save_deploy_config
+            echo "✅ Configuration reset to defaults."
+            ;;
+        help)
+            echo "Deploy Configuration Management"
+            echo ""
+            echo "Commands:"
+            echo "  show    Show current configuration"
+            echo "  init    Create initial configuration file"
+            echo "  edit    Edit configuration file"
+            echo "  reset   Reset to default configuration"
+            echo "  help    Show this help"
+            ;;
+        *)
+            echo "Unknown config command: $cmd"
+            echo "Use 'zluri deploy config help' for available commands."
+            ;;
+    esac
+}
