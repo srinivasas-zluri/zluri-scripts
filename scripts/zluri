@@ -7,15 +7,27 @@ COMMAND="${1:-}"
 case "$COMMAND" in
   deploy)
     shift
-    # Call the deploy script (assumes it’s in the same directory)
     "$(dirname "$0")/zluri-deploy" "$@"
+    ;;
+  help|--help|-h)
+    echo "Usage: zluri <command>"
+    echo ""
+    echo "Available commands:"
+    echo "  deploy     Trigger feature env deployment"
+    echo "  help       Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  zluri deploy    # Start interactive deployment process"
+    echo "  zluri help      # Show this help message"
     ;;
   *)
     echo "Usage: zluri <command>"
     echo ""
     echo "Available commands:"
     echo "  deploy     Trigger feature env deployment"
-    # Add more commands here later
+    echo "  help       Show this help message"
+    echo ""
+    echo "Use 'zluri help' for more information."
     exit 1
     ;;
 esac

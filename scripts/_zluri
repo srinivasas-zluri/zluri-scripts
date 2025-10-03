@@ -1,0 +1,43 @@
+#compdef zluri
+
+# Zluri CLI completion for zsh
+# This completion script provides autocomplete for the zluri command
+
+_zluri() {
+    local context state line
+    typeset -A opt_args
+
+    _arguments -C \
+        '1: :->command' \
+        '*::arg:->args' \
+        && return 0
+
+    case $state in
+        command)
+            local commands=(
+                'deploy:Trigger feature env deployment'
+                'help:Show help message'
+                '--help:Show help message'
+                '-h:Show help message'
+            )
+            _describe 'commands' commands
+            ;;
+        args)
+            case $line[1] in
+                deploy)
+                    local deploy_args=(
+                        'help:Show deploy command help and workflow information'
+                        '--help:Show deploy command help and workflow information'
+                        '-h:Show deploy command help and workflow information'
+                    )
+                    _describe 'deploy options' deploy_args
+                    ;;
+                help|--help|-h)
+                    _message "help command - shows usage information"
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+_zluri "$@"

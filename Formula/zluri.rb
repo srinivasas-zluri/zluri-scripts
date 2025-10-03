@@ -11,5 +11,8 @@ class Zluri < Formula
   def install
     bin.install "zluri"
     bin.install "zluri-deploy"
+    
+    # Install zsh completion
+    zsh_completion.install "_zluri"
   end
 end
