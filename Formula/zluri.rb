@@ -1,8 +1,8 @@
 class Zluri < Formula
   desc "Zluri CLI tool"
   homepage "https://github.com/srinivasas-zluri/zluri-scripts"
-  url "https://github.com/srinivasas-zluri/zluri-scripts/releases/download/v1.0.3/zluri-macos-v1.0.3.tar.gz"
-  sha256 "41b0e4ea9a3d8f49147959095cf2629e93fe064576c8d4ef252f7633f58c439e"
+  url "https://github.com/srinivasas-zluri/zluri-scripts/releases/download/v1.0.4/zluri-macos-v1.0.4.tar.gz"
+  sha256 "10205c1bb1bce3f38ba4d319bf06dd19cb8017f691c6dba6d17732406eaa6009"
   license "MIT"
 
   depends_on "gh"
