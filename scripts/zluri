@@ -1,0 +1,21 @@
+
+#!/usr/bin/env bash
+set -euo pipefail
+
+COMMAND="${1:-}"
+
+case "$COMMAND" in
+  deploy)
+    shift
+    # Call the deploy script (assumes it’s in the same directory)
+    "$(dirname "$0")/zluri-deploy" "$@"
+    ;;
+  *)
+    echo "Usage: zluri <command>"
+    echo ""
+    echo "Available commands:"
+    echo "  deploy     Trigger feature env deployment"
+    # Add more commands here later
+    exit 1
+    ;;
+esac
