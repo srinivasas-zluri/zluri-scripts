@@ -6,7 +6,7 @@ class Zluri < Formula
   license "MIT"
 
   depends_on "gh"
-  # depends_on "skim"
+  depends_on "sk"
 
   def install
     bin.install "zluri"
