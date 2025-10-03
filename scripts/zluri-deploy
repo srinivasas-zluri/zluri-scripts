@@ -18,17 +18,15 @@ AVAILABLE_REPOS=(
   "all"
 )
 
-# --- Dependency checks (assume installed by Homebrew) ---
+# --- Dependency check for sk and gh ---
 if ! command -v gh >/dev/null 2>&1; then
   echo "❌ GitHub CLI not found. Install via Homebrew: brew install gh"
   exit 1
 fi
 
 if ! command -v sk >/dev/null 2>&1; then
-  echo "⚠️  skim not found. Using fallback selection menu."
-  USE_SK=0
-else
-  USE_SK=1
+  echo "❌ skim (sk) not found. Install via Homebrew: brew install skim"
+  exit 1
 fi
 
 # --- Auth check ---
@@ -50,26 +48,10 @@ echo " Select repos to deploy (TAB to multi-select, ENTER to confirm)"
 echo "======================================================="
 
 CHOICE_LIST=$(printf "%s\n" "${AVAILABLE_REPOS[@]}")
+PRESELECT_ITEMS=$(echo "$LAST_REPOS" | tr ',' '\n')
 
-# Preselect last choices
-PRESELECT_ARG=()
-if [[ -n "$LAST_REPOS" ]]; then
-  IFS=',' read -ra PRESELECT_ITEMS <<< "$LAST_REPOS"
-  for item in "${PRESELECT_ITEMS[@]}"; do
-    PRESELECT_ARG+=(--preselect-items "$item")
-  done
-fi
-
-# --- Repo selection ---
-if [[ "$USE_SK" -eq 1 ]]; then
-  CHOICES=$(echo "$CHOICE_LIST" | sk --multi --bind "tab:toggle+down" "${PRESELECT_ARG[@]}")
-else
-  echo "Available repos:"
-  select choice in "${AVAILABLE_REPOS[@]}"; do
-    CHOICES="$choice"
-    break
-  done
-fi
+# --- Repo selection using sk ---
+CHOICES=$(echo "$CHOICE_LIST" | sk --multi --bind "tab:toggle+down" --pre-select-items "$PRESELECT_ITEMS")
 
 if [[ -z "$CHOICES" ]]; then
   echo "❌ No repos selected. Exiting."
