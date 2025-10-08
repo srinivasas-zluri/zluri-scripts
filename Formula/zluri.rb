@@ -14,9 +14,9 @@ class Zluri < Formula
     bin.install "zluri-deploy"
     bin.install "zluri-agent"
 
-    chmod 0755, "zluri"
-    chmod 0755, "zluri-deploy"
-    chmod 0755, "zluri-agent"
+    chmod 0755, bin/"zluri"
+    chmod 0755, bin/"zluri-deploy"
+    chmod 0755, bin/"zluri-agent"
     
     # Install zsh completion
     zsh_completion.install "_zluri"
